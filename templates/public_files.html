@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block title %}Public Files{% endblock %}
+
+{% block content %}
+<h2>Public Files</h2>
+<form class="form-inline mb-3" method="get">
+    <input class="form-control mr-sm-2" type="search" placeholder="Search" aria-label="Search" name="search" value="{{ request.query_params.get('search', '') }}">
+    <select class="form-control mr-sm-2" name="sort_by">
+        <option value="date" {% if request.query_params.get('sort_by') == 'date' %}selected{% endif %}>Date</option>
+        <option value="downloads" {% if request.query_params.get('sort_by') == 'downloads' %}selected{% endif %}>Downloads</option>
+        <option value="title" {% if request.query_params.get('sort_by') == 'title' %}selected{% endif %}>Title</option>
+    </select>
+    <button class="btn btn-outline-success my-2 my-sm-0" type="submit">Search</button>
+</form>
+<div class="list-group">
+    {% for file in files %}
+    <div class="list-group-item">
+        <div>
+            <h5 class="mb-1">{{ file.title }}</h5>
+            <p class="mb-1">{{ file.description }}</p>
+            <small class="text-muted">Uploaded by {{ file.owner.email }}</small>
+            <small class="text-muted">Uploaded on {{ file.upload_date.strftime('%Y-%m-%d') }}</small>
+            <small class="text-muted">Hashtags: {{ file.hashtags }}</small>
+        </div>
+        <div>
+            <a href="/download/original/{{ file.id }}" class="btn btn-sm btn-outline-primary">Download Original</a>
+            <a href="/download/modified/{{ file.id }}" class="btn btn-sm btn-outline-secondary">Download Modified</a>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

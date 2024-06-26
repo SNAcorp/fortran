@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block title %}Home{% endblock %}
+
+{% block content %}
+<div class="jumbotron">
+    <h1 class="display-4">Welcome to the File Management System</h1>
+    <p class="lead">This is a simple app to manage your files.</p>
+    <hr class="my-4">
+    <p>You can register, login, and manage your files.</p>
+    <a class="btn btn-primary btn-lg" href="/register" role="button">Register</a>
+    <a class="btn btn-secondary btn-lg" href="/login" role="button">Login</a>
+</div>
+{% endblock %}
