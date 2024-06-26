@@ -286,7 +286,7 @@ def upload_file(
         owner_id=current_user.id,
         is_public=is_public,
         hashtags=hashtags,
-        modifier_version_id=latest_modifier_version.id
+        modifier_version_id=latest_modifier_version
     )
     db.add(db_file)
     try:
