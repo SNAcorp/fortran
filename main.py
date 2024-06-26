@@ -176,9 +176,9 @@ def login_form(request: Request):
 def login(email: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
     db_user = get_user_by_email(db, email)
     if not db_user or not pwd_context.verify(password, db_user.hashed_password):
-        raise HTTPException(status_code=400, detail="Invalid credentials")
+        return RedirectResponse(url="/login?error=true", status_code=status.HTTP_302_FOUND)
     if db_user.is_active == 2:
-        return RedirectResponse(url="/access-denied", status_code=status.HTTP_302_FOUND)
+        raise HTTPException(status_code=403, detail="User access denied")
     if db_user.is_active == 0:
         return RedirectResponse(url="/awaiting-approval", status_code=status.HTTP_302_FOUND)
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
