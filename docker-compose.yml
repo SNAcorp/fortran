@@ -1,0 +1,20 @@
+version: '3.8'
+services:
+  web:
+    build: .
+    ports:
+      - "80:80"
+    depends_on:
+      - db
+    environment:
+      - DATABASE_URL=postgresql://server:5375@db:5432/fotran
+  db:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: dbname
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+volumes:
+  postgres_data:
