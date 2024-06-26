@@ -2,7 +2,7 @@ import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
-DATABASE_URL = "postgresql://nikitastepanov@127.0.0.1/fortran"
+DATABASE_URL = os.getenv('DATABASE_URL')
     # os.getenv('DATABASE_URL')
 
 
