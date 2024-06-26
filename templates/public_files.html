@@ -12,7 +12,7 @@
             <h5>{{ file.title }}</h5>
             <p>{{ file.description }}</p>
             <p>Uploaded: {{ file.upload_date.strftime('%Y-%m-%d') }}</p>
-            <p>Modifier version: {{ file.modifier_version.version }}</p>
+            <p>Modifier version: {{ file.modifier_version.id }}</p>
         </div>
         <div>
             <a href="/download/original/{{ file.id }}" class="btn btn-primary btn-sm">Download Original</a>
