@@ -323,7 +323,8 @@ def admin(request: Request, db: Session = Depends(get_db), current_user: User = 
         "total_files": total_files,
         "total_users": total_users,
         "backups": backups,
-        "current_user": current_user
+        "current_user": current_user,
+        "user": current_user
     })
 
 
