@@ -4,30 +4,60 @@
 
 {% block content %}
 <h2>Dashboard</h2>
-<form class="form-inline mb-3" method="get">
-    <input class="form-control mr-sm-2" type="search" placeholder="Search" aria-label="Search" name="search" value="{{ request.query_params.get('search', '') }}">
-    <select class="form-control mr-sm-2" name="sort_by">
-        <option value="date" {% if request.query_params.get('sort_by') == 'date' %}selected{% endif %}>Date</option>
-        <option value="downloads" {% if request.query_params.get('sort_by') == 'downloads' %}selected{% endif %}>Downloads</option>
-        <option value="title" {% if request.query_params.get('sort_by') == 'title' %}selected{% endif %}>Title</option>
-    </select>
-    <button class="btn btn-outline-success my-2 my-sm-0" type="submit">Search</button>
-</form>
-<div class="list-group">
-    {% for file in files %}
-    <div class="list-group-item">
-        <div>
-            <h5 class="mb-1">{{ file.title }}</h5>
-            <p class="mb-1">{{ file.description }}</p>
-            <small class="text-muted">{{ file.owner.email if file.is_public else '' }}</small>
-            <small class="text-muted">Uploaded on {{ file.upload_date.strftime('%Y-%m-%d') }}</small>
-            <small class="text-muted">Hashtags: {{ file.hashtags }}</small>
-        </div>
-        <div>
-            <a href="/download/original/{{ file.id }}" class="btn btn-sm btn-outline-primary">Download Original</a>
-            <a href="/download/modified/{{ file.id }}" class="btn btn-sm btn-outline-secondary">Download Modified</a>
-        </div>
-    </div>
-    {% endfor %}
+<p>Current modifier version: {{ modifier_version }}</p>
+
+{% if request.query_params.get('message') %}
+<div class="alert alert-success mt-3" role="alert">
+    {{ request.query_params.get('message') }}
 </div>
+{% endif %}
+
+{% if request.query_params.get('error') %}
+<div class="alert alert-danger mt-3" role="alert">
+    {{ request.query_params.get('error') }}
+</div>
+{% endif %}
+
+<ul class="list-group">
+    {% for file in files %}
+    <li class="list-group-item d-flex justify-content-between align-items-center">
+        <div>
+            <h5>{{ file.title }}</h5>
+            <p>{{ file.description }}</p>
+            <p>Uploaded: {{ file.upload_date.strftime('%Y-%m-%d') }}</p>
+            <p>Modifier version: {{ file.modifier_version.id }}</p>
+        </div>
+        <div>
+            <a href="/download/original/{{ file.id }}" class="btn btn-primary btn-sm">Download Original</a>
+            <a href="/download/modified/{{ file.id }}" class="btn btn-secondary btn-sm">Download Modified</a>
+            {% if file.modifier_version.id != modifier_version %}
+            <form action="/remodify/{{ file.id }}" method="post" class="remodify-form" style="display:inline;">
+                <button type="submit" class="btn btn-warning btn-sm">Remodify with Latest Modifier</button>
+            </form>
+            {% endif %}
+        </div>
+    </li>
+    {% endfor %}
+</ul>
+
+<script>
+document.querySelectorAll('.remodify-form').forEach(form => {
+    form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const response = await fetch(form.action, {
+            method: form.method,
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        });
+        const result = await response.json();
+        if (response.status === 200) {
+            window.location.href = "/dashboard?message=" + encodeURIComponent(result.message);
+        } else {
+            window.location.href = "/dashboard?error=" + encodeURIComponent(result.message);
+        }
+    });
+});
+</script>
+
 {% endblock %}

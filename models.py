@@ -9,6 +9,9 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True)
     hashed_password = Column(String)
+    is_active = Column(Integer, default=0)  # 0 - ожидание, 1 - доступ разрешен, 2 - доступ запрещен
+    is_admin = Column(Boolean, default=False)
+    registration_date = Column(DateTime, default=datetime.utcnow)
 
     files = relationship("File", back_populates="owner")
 
@@ -25,5 +28,14 @@ class File(Base):
     upload_date = Column(DateTime, default=datetime.utcnow)
     hashtags = Column(String)
     download_count = Column(Integer, default=0)
+    modifier_version_id = Column(Integer, ForeignKey("modifier_versions.id"))
 
     owner = relationship("User", back_populates="files")
+    modifier_version = relationship("ModifierVersion")
+
+class ModifierVersion(Base):
+    __tablename__ = "modifier_versions"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    file_path = Column(String)
+    upload_date = Column(DateTime, default=datetime.utcnow)

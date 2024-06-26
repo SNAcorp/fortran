@@ -31,6 +31,11 @@
     </div>
     <button type="submit" class="btn btn-primary mt-3">Upload</button>
 </form>
+{% if request.state.error %}
+<div class="alert alert-danger mt-3" role="alert">
+    {{ request.state.error }}
+</div>
+{% endif %}
 <script>
     const dropZone = document.getElementById('drop-zone');
     const fileInput = document.getElementById('file-input');
