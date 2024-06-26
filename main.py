@@ -37,9 +37,17 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 ACCESS_TOKEN_EXPIRE_MINUTES = 120
 
+BACKUPS = "backups"
 MODIFIER_DIR = "modifiers"
+UPLOADS = "uploads"
 if not os.path.exists(MODIFIER_DIR):
     os.makedirs(MODIFIER_DIR)
+
+if not os.path.exists(BACKUPS):
+    os.makedirs(BACKUPS)
+
+if not os.path.exists(UPLOADS):
+    os.makedirs(UPLOADS)
 
 class UserCreate(BaseModel):
     email: EmailStr
