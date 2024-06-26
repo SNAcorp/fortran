@@ -6,13 +6,13 @@ services:
     depends_on:
       - db
     environment:
-      - DATABASE_URL=postgresql://server:5375@db:5432/fotran
+      - DATABASE_URL=postgresql://server:v9023aSH@@db:5432/fortran
   db:
     image: postgres:13
     environment:
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: dbname
+      POSTGRES_USER: server
+      POSTGRES_PASSWORD: v9023aSH@
+      POSTGRES_DB: fortran
     volumes:
       - postgres_data:/var/lib/postgresql/data
 volumes:
