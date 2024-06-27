@@ -4,38 +4,33 @@
 
 {% block content %}
 <h2>Profile</h2>
-<p>Email: {{ user.email }}</p>
-<button type="button" class="btn btn-primary" data-toggle="modal" data-target="#changePasswordModal">
-    Change Password
-</button>
 
-<!-- Modal -->
-<div class="modal fade" id="changePasswordModal" tabindex="-1" role="dialog" aria-labelledby="changePasswordModalLabel" aria-hidden="true">
-    <div class="modal-dialog" role="document">
-        <div class="modal-content">
-            <form action="/change-password" method="post">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="changePasswordModalLabel">Change Password</h5>
-                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                        <span aria-hidden="true">&times;</span>
-                    </button>
-                </div>
-                <div class="modal-body">
-                    <div class="form-group">
-                        <label for="old_password">Old Password</label>
-                        <input type="password" class="form-control" id="old_password" name="old_password" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="new_password">New Password</label>
-                        <input type="password" class="form-control" id="new_password" name="new_password" required>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
-                    <button type="submit" class="btn btn-primary">Save changes</button>
-                </div>
-            </form>
-        </div>
-    </div>
+{% if request.query_params.get('message') %}
+<div class="alert alert-success mt-3" role="alert">
+    {{ request.query_params.get('message') }}
 </div>
+{% endif %}
+
+<p>Email: {{ user.email }}</p>
+
+<!-- Change password form -->
+<h3>Change Password</h3>
+<form action="/change-password" method="post">
+    <div class="form-group">
+        <label for="old_password">Old Password</label>
+        <input type="password" class="form-control" id="old_password" name="old_password" required>
+    </div>
+    <div class="form-group">
+        <label for="new_password">New Password</label>
+        <input type="password" class="form-control" id="new_password" name="new_password" required>
+    </div>
+    <button type="submit" class="btn btn-primary">Change Password</button>
+</form>
+<div class="nothing"></div>
+<!-- Logout button -->
+<h3>Logout</h3>
+<form action="/logout" method="post">
+    <button type="submit" class="btn btn-danger">Logout</button>
+</form>
+
 {% endblock %}

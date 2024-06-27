@@ -82,3 +82,15 @@
     margin-top: 10px;
     max-height: 100px;
 }
+
+.navbar-nav {
+    align-items: center;
+}
+
+.logout {
+    color: darkred;
+}
+
+.nothing {
+    height: 5vh;
+}
