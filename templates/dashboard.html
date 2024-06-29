@@ -6,6 +6,30 @@
 <h2>Dashboard</h2>
 <p>Current modifier version: {{ modifier_version }}</p>
 
+<form method="get" action="/public-files">
+    <div class="form-row">
+        <div class="col">
+            <input type="text" class="form-control" name="search" placeholder="Search by title, hashtags, author" value="{{ request.query_params.get('search', '') }}">
+        </div>
+        <div class="col">
+            <input type="date" class="form-control" name="start_date" value="{{ request.query_params.get('start_date', '') }}">
+        </div>
+        <div class="col">
+            <input type="date" class="form-control" name="end_date" value="{{ request.query_params.get('end_date', '') }}">
+        </div>
+        <div class="col">
+            <select class="form-control" name="sort_by">
+                <option value="date" {% if request.query_params.get('sort_by') == 'date' %}selected{% endif %}>Date</option>
+                <option value="downloads" {% if request.query_params.get('sort_by') == 'downloads' %}selected{% endif %}>Downloads</option>
+                <option value="title" {% if request.query_params.get('sort_by') == 'title' %}selected{% endif %}>Title</option>
+            </select>
+        </div>
+        <div class="col">
+            <button type="submit" class="btn btn-primary">Filter</button>
+        </div>
+    </div>
+</form>
+
 {% if request.query_params.get('message') %}
 <div class="alert alert-success mt-3" role="alert">
     {{ request.query_params.get('message') }}
