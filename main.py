@@ -1,12 +1,19 @@
-from fastapi import FastAPI, Depends, HTTPException, Request, status, Form, File, UploadFile
+import asyncio
+import json
+import threading
+from typing import List
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI, Depends, HTTPException, Request, status, Form, File, UploadFile, BackgroundTasks, \
+    WebSocket, WebSocketDisconnect
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from passlib.context import CryptContext
-from pydantic import BaseModel, EmailStr
-from database import get_db, Base, engine
+from pydantic import BaseModel, EmailStr, ValidationError
+from database import get_db, Base, engine, SessionLocal
+from func_for_mod_zip import process_zip_file
 from models import User, File as FileModel
 from models import ModifierVersion
 from jwt_utils import create_access_token, get_current_user
@@ -17,7 +24,18 @@ from datetime import timedelta, datetime
 import uuid
 import uvicorn
 from contextlib import asynccontextmanager
+import jwt
+import redis
 
+# redis_host = os.getenv("REDIS_HOST", "localhost")
+# redis_port = os.getenv("REDIS_PORT", 6379)
+# redis_client = redis.StrictRedis(host=redis_host, port=redis_port, db=0)
+# REDIS_KEY = "public_files"
+# REDIS_TTL = 60  # Время жизни кэша в секундах
+
+redis_client = redis.StrictRedis(host='localhost', port=6379, db=0)
+REDIS_KEY = "public_files"
+REDIS_TTL = 600  # Время жизни кэша в секундах
 
 
 @asynccontextmanager
@@ -27,11 +45,18 @@ async def lifespan(app: FastAPI):
     yield
     # Shutdown code (if any)
 
+
 MODIFIER_VERSION_FILE = "modifier_version.txt"
 app = FastAPI(lifespan=lifespan)
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
-
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 templates = Jinja2Templates(directory="templates")
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -49,9 +74,77 @@ if not os.path.exists(BACKUPS):
 if not os.path.exists(UPLOADS):
     os.makedirs(UPLOADS)
 
+SECRET_KEY = "IloveSNA1942"
+ALGORITHM = "HS256"
+
+class WebSocketManager:
+    def __init__(self):
+        self.active_connections: list[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+
+    def disconnect(self, websocket: WebSocket):
+        self.active_connections.remove(websocket)
+
+    async def broadcast(self, message: str):
+        for connection in self.active_connections:
+            await connection.send_text(message)
+
+manager = WebSocketManager()
+
+def check_file_processing_status(db: Session, file_id: int):
+    file = db.query(FileModel).filter(FileModel.id == file_id).first()
+    if file:
+        return file.status
+    return None
+
+async def update_file_status():
+    while True:
+        db = SessionLocal()
+        files = db.query(FileModel).filter(FileModel.status == "processing").all()
+        for file in files:
+            # Проверка состояния обработки файла
+            new_status = check_file_processing_status(db, file.id)
+            if file.status != new_status:
+                file.status = new_status
+                db.commit()
+                await manager.broadcast(json.dumps({"file_id": file.id, "status": file.status}))
+        db.close()
+        await asyncio.sleep(5)
+
+def start_background_task():
+    loop = asyncio.get_event_loop()
+    loop.create_task(update_file_status())
+
+from fastapi import WebSocket, WebSocketDisconnect
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await manager.connect(websocket)
+    try:
+        while True:
+            data = await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+
+
 class UserCreate(BaseModel):
     email: EmailStr
     password: str
+
+
+class FileResponse(BaseModel):
+    id: int
+    title: str
+    description: str
+    upload_date: str
+    owner_email: str
+    download_count: int
+    status: str
+    original_url: str
+    modified_url: str
 
 
 class UserLogin(BaseModel):
@@ -65,8 +158,32 @@ class UserInDB(BaseModel):
     class Config:
         from_attributes = True
 
+
 def get_latest_modifier_version(db: Session):
     return len(db.query(ModifierVersion).order_by(ModifierVersion.id).all())
+
+
+def get_public_files_from_cache():
+    cached_data = redis_client.get(REDIS_KEY)
+    if cached_data:
+        return json.loads(cached_data)
+    return None
+
+
+def set_public_files_to_cache(data):
+    redis_client.set(REDIS_KEY, json.dumps(data), ex=REDIS_TTL)
+
+
+def clear_public_files_cache():
+    redis_client.delete(REDIS_KEY)
+
+
+def check_file_processing_status(db: Session, file_id: int):
+    file = db.query(FileModel).filter(FileModel.id == file_id).first()
+    if file:
+        return file.status
+    return None
+
 
 def create_user(db: Session, user: UserCreate):
     hashed_password = pwd_context.hash(user.password)
@@ -78,14 +195,19 @@ def create_user(db: Session, user: UserCreate):
     return db_user
 
 
+
+
+
 def get_user_by_email(db: Session, email: str):
     return db.query(User).filter(User.email == email).first()
+
 
 def get_modifier_version():
     if os.path.exists(MODIFIER_VERSION_FILE):
         with open(MODIFIER_VERSION_FILE, 'r') as f:
             return f.read().strip()
     return "Unknown"
+
 
 def set_modifier_version(db: Session, file_path: str):
     modifier_version = ModifierVersion(file_path=file_path)
@@ -124,13 +246,14 @@ def remodify_file(file_id: int, db: Session = Depends(get_db), current_user: Use
                             content={"message": "File is already modified with the current version of the modifier"})
 
     try:
-        modificate(file.original_filename, file.modified_filename)
+        modificate(file.id, file.original_filename, file.modified_filename, db)
         file.modifier_version_id = latest_modifier_version
         db.commit()
         return JSONResponse(status_code=200,
                             content={"message": "File successfully remodified with the latest version of the modifier"})
     except Exception as e:
         return JSONResponse(status_code=500, content={"message": f"An error occurred: {str(e)}"})
+
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -224,6 +347,37 @@ def dashboard(request: Request, db: Session = Depends(get_db), current_user: Use
                                                          "modifier_version": latest_modifier_version})
 
 
+@app.websocket("/ws/dashboard")
+async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)):
+    token = websocket.query_params.get("token")
+    if not token:
+        await websocket.close(code=1008)
+        return
+
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id: int = payload.get("sub")
+        if user_id is None:
+            raise ValidationError("Invalid token")
+        current_user = db.query(User).filter(User.id == user_id).first()
+        if current_user is None:
+            raise ValidationError("User not found")
+    except (jwt.PyJWTError, ValidationError):
+        await websocket.close(code=1008)
+        return
+
+    await websocket.accept()
+    try:
+        while True:
+            files = db.query(FileModel).filter(
+                (FileModel.owner_id == current_user.id) | (FileModel.is_public == True)).all()
+            files_data = [{"id": file.id, "status": file.status} for file in files]
+            await websocket.send_json(files_data)
+            await asyncio.sleep(5)
+    except WebSocketDisconnect:
+        print("Client disconnected")
+
+
 @app.get("/upload", response_class=HTMLResponse)
 def upload_form(request: Request, current_user: User = Depends(get_current_user)):
     if current_user.is_active == 0:
@@ -238,15 +392,24 @@ def upload_file(
         title: str = Form(...),
         description: str = Form(...),
         hashtags: str = Form(...),
+        file_type: str = Form(...),
         file: UploadFile = File(...),
         is_public: bool = Form(False),
         db: Session = Depends(get_db),
         current_user: User = Depends(get_current_user),
-        request: Request = None
+        request: Request = None,
+        background_tasks: BackgroundTasks = None
 ):
-    if not file.filename.endswith(('.f', '.for', '.f90', '.f95', '.f03', '.f08')):
+    valid_fortran_extensions = ('.f', '.for', '.f90', '.f95', '.f03', '.f08')
+
+    if file_type == "fortran" and not file.filename.endswith(valid_fortran_extensions):
         if request:
             request.state.error = "Invalid file type. Please upload a Fortran file."
+        return templates.TemplateResponse("upload.html", {"request": request})
+
+    if file_type == "zip" and not file.filename.endswith('.zip'):
+        if request:
+            request.state.error = "Invalid file type. Please upload a ZIP file."
         return templates.TemplateResponse("upload.html", {"request": request})
 
     if is_public:
@@ -276,8 +439,6 @@ def upload_file(
     if not latest_modifier_version:
         raise HTTPException(status_code=500, detail="No modifier version found")
 
-    modificate(original_path, modified_path)
-
     db_file = FileModel(
         original_filename=original_path,
         modified_filename=modified_path,
@@ -286,7 +447,8 @@ def upload_file(
         owner_id=current_user.id,
         is_public=is_public,
         hashtags=hashtags,
-        modifier_version_id=latest_modifier_version
+        modifier_version_id=latest_modifier_version,
+        status="waiting"
     )
     db.add(db_file)
     try:
@@ -298,6 +460,14 @@ def upload_file(
         return templates.TemplateResponse("upload.html", {"request": request})
 
     db.refresh(db_file)
+
+    if file_type == "fortran":
+        background_tasks.add_task(modificate, db_file.id, original_path, modified_path, db)
+    else:
+        background_tasks.add_task(process_zip_file, db_file.id, original_path, db)
+
+    clear_public_files_cache()
+
     return RedirectResponse(url="/dashboard", status_code=status.HTTP_302_FOUND)
 
 
@@ -402,6 +572,7 @@ def change_password(
     db.commit()
     return RedirectResponse(url="/profile", status_code=status.HTTP_302_FOUND)
 
+
 @app.post("/admin/approve/{user_id}")
 def approve_user(user_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     if not current_user.is_admin:
@@ -411,6 +582,7 @@ def approve_user(user_id: int, db: Session = Depends(get_db), current_user: User
         user.is_active = 1
         db.commit()
     return RedirectResponse(url="/admin", status_code=status.HTTP_302_FOUND)
+
 
 @app.post("/admin/reject/{user_id}")
 def reject_user(user_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -422,6 +594,7 @@ def reject_user(user_id: int, db: Session = Depends(get_db), current_user: User 
         db.commit()
     return RedirectResponse(url="/admin", status_code=status.HTTP_302_FOUND)
 
+
 @app.post("/admin/block/{user_id}")
 def block_user(user_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     if not current_user.is_admin:
@@ -432,6 +605,7 @@ def block_user(user_id: int, db: Session = Depends(get_db), current_user: User =
         db.commit()
     return RedirectResponse(url="/admin", status_code=status.HTTP_302_FOUND)
 
+
 @app.post("/admin/unblock/{user_id}")
 def unblock_user(user_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     if not current_user.is_admin:
@@ -441,6 +615,7 @@ def unblock_user(user_id: int, db: Session = Depends(get_db), current_user: User
         user.is_active = 1
         db.commit()
     return RedirectResponse(url="/admin", status_code=status.HTTP_302_FOUND)
+
 
 @app.post("/admin/make-admin/{user_id}")
 def make_admin(user_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -454,21 +629,26 @@ def make_admin(user_id: int, db: Session = Depends(get_db), current_user: User =
 
 
 @app.post("/admin/upload-script")
-async def upload_script(file: UploadFile = File(...), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+async def upload_script(file: UploadFile = File(...), db: Session = Depends(get_db),
+                        current_user: User = Depends(get_current_user)):
     if not current_user.is_admin:
         return JSONResponse(status_code=403, content={"message": "Not authorized"})
 
     if not file.filename.endswith('.py'):
-        return JSONResponse(status_code=400, content={"message": "Invalid file type. Please upload a Python (.py) file."})
+        return JSONResponse(status_code=400,
+                            content={"message": "Invalid file type. Please upload a Python (.py) file."})
 
     temp_file_path = os.path.join(MODIFIER_DIR, f"temp_{uuid.uuid4()}.py")
     with open(temp_file_path, 'wb') as out_file:
         shutil.copyfileobj(file.file, out_file)
 
-    return JSONResponse(status_code=200, content={"message": "File uploaded successfully", "temp_file_path": temp_file_path})
+    return JSONResponse(status_code=200,
+                        content={"message": "File uploaded successfully", "temp_file_path": temp_file_path})
+
 
 @app.post("/admin/confirm-upload-script")
-def confirm_upload_script(temp_file_path: str = Form(...), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def confirm_upload_script(temp_file_path: str = Form(...), db: Session = Depends(get_db),
+                          current_user: User = Depends(get_current_user)):
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Not authorized")
 
@@ -505,6 +685,32 @@ def restore_script(version_id: int, db: Session = Depends(get_db), current_user:
     return JSONResponse(status_code=200, content={"message": "Backup restored successfully"})
 
 
+@app.get("/api/public-files", response_model=List[FileResponse])
+def get_public_files(db: Session = Depends(get_db)):
+    cached_files = get_public_files_from_cache()
+    if cached_files:
+        return cached_files
+
+    files = db.query(FileModel).filter(FileModel.is_public == True).all()
+    public_files = [
+        {
+            "id": file.id,
+            "title": file.title,
+            "description": file.description,
+            "upload_date": file.upload_date.strftime("%Y-%m-%d"),
+            "owner_email": file.owner.email,
+            "download_count": file.download_count,
+            "status": file.status,
+            "original_url": f"/download/original/{file.id}",
+            "modified_url": f"/download/modified/{file.id}" if file.status == "ready" else None
+        }
+        for file in files
+    ]
+
+    set_public_files_to_cache(public_files)
+    return public_files
+
+
 @app.exception_handler(404)
 def not_found(request: Request, exc):
     return templates.TemplateResponse("404.html", {"request": request}, status_code=404)
@@ -517,3 +723,5 @@ def internal_server_error(request: Request, exc):
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=80, reload=True)
+    # background_thread = threading.Thread(target=start_background_task)
+    # background_thread.start()

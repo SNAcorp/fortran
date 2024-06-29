@@ -7,6 +7,11 @@ services:
       POSTGRES_DB: fortran
     volumes:
       - postgres_data:/var/lib/postgresql/data
+  redis:
+    image: "redis:latest"
+    container_name: redis
+    ports:
+      - "6379:6379"
   web:
     build: .
     command: /wait-for-it.sh db:5432 -- uvicorn main:app --host 0.0.0.0 --port 80
@@ -14,7 +19,12 @@ services:
       - "80:80"
     depends_on:
       - db
+      - redis
     environment:
       - DATABASE_URL=postgresql://server:v9023aSH@db:5432/fortran
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+
 volumes:
-  postgres_data:
+    - postgres_data:
+    - .:/app

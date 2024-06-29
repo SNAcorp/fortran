@@ -1,7 +1,9 @@
 from pyparsing import Word, alphas, alphanums, Group, ZeroOrMore, Optional, Suppress, Keyword, Combine, nums, \
     restOfLine, OneOrMore, ParseResults
-
+from fastapi import HTTPException
 import re
+
+from models import File
 
 keywords = {'INTEGER', 'REAL', 'DOUBLE', 'CHARACTER',
             'LOGICAL', 'COMPLEX', 'COMMON', 'DATA',
@@ -199,10 +201,10 @@ def parse_fortran_code(code):
         words = line.split()
         if words and words[0] not in ('INTEGER', 'REAL', 'DOUBLE PRECISION', 'CHARACTER', 'LOGICAL', 'COMPLEX'):
             for word in words:
-                print("word " + word)
+                # print("word " + word)
                 clean_word = word.strip(',').split('(')[0].split('!')[0]  # Remove potential array dimensions
                 clean_word = clean_word.split('=')[0]
-                print("clean_word " + word)
+                # print("clean_word " + word)
                 if clean_word.upper() in keywords or clean_word.isdigit():
                     continue
                 if clean_word in declared_vars or not clean_word.isalpha() or check_variable(word):
@@ -227,11 +229,16 @@ def add_threadprivate_directive(code, variables):
     return  "\n".join(modified_lines) + "\n"
 
 
-def modificate(input_file, output_file):
+def modificate(file_id, input_file, output_file, db):
+    filer = db.query(File).filter(File.id == file_id).first()
+    if not filer:
+        raise HTTPException(status_code=404, detail="File not found")
+
     with open(input_file, 'r') as file:
         code = file.read()
     program = code
-
+    filer.status = "processing"
+    db.commit()
     variables = parse_fortran_code(remove_comments_and_convert_multiline_declarations(input_file, output_file))
     print("Variables found:", variables)
 
@@ -239,5 +246,8 @@ def modificate(input_file, output_file):
 
     with open(output_file, 'w') as file:
         file.write(result + program)
+
+    filer.status = "ready"
+    db.commit()
 
 # 435

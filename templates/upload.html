@@ -4,7 +4,7 @@
 
 {% block content %}
 <h2>Upload File</h2>
-<p>Please upload a Fortran file with one of the following extensions: .f, .for, .f90, .f95, .f03, .f08</p>
+<p>Please upload a Fortran file with one of the following extensions: .f, .for, .f90, .f95, .f03, .f08 or a ZIP file containing Fortran project files.</p>
 <form id="upload-form" action="/upload" method="post" enctype="multipart/form-data">
     <div class="form-group">
         <label for="title">Title:</label>
@@ -17,6 +17,13 @@
     <div class="form-group">
         <label for="hashtags">Hashtags (comma-separated):</label>
         <input type="text" class="form-control" id="hashtags" name="hashtags" required>
+    </div>
+    <div class="form-group">
+        <label for="file_type">Select file type</label>
+        <select class="form-control" id="file_type" name="file_type" required>
+            <option value="fortran">Single Fortran File</option>
+            <option value="zip">Fortran Project (ZIP)</option>
+        </select>
     </div>
     <div class="drop-zone" id="drop-zone">
         <span class="drop-zone__prompt">Drop file here or click to upload</span>
@@ -40,6 +47,7 @@
     const dropZone = document.getElementById('drop-zone');
     const fileInput = document.getElementById('file-input');
     const dropZoneThumb = document.getElementById('drop-zone-thumb');
+    const fileTypeSelect = document.getElementById('file_type');
 
     dropZone.addEventListener('click', () => {
         fileInput.click();
@@ -47,8 +55,13 @@
 
     fileInput.addEventListener('change', (e) => {
         if (fileInput.files.length) {
-            if (!fileInput.files[0].name.match(/\.(f|for|f90|f95|f03|f08)$/)) {
-                alert('Invalid file type. Please upload a Fortran file.');
+            const selectedFileType = fileTypeSelect.value;
+            const validFortranExtensions = /\.(f|for|f90|f95|f03|f08)$/;
+            const validZipExtension = /\.zip$/;
+
+            if ((selectedFileType === 'fortran' && !fileInput.files[0].name.match(validFortranExtensions)) ||
+                (selectedFileType === 'zip' && !fileInput.files[0].name.match(validZipExtension))) {
+                alert('Invalid file type. Please upload a valid file.');
                 fileInput.value = '';
                 return;
             }
@@ -68,8 +81,13 @@
     dropZone.addEventListener('drop', (e) => {
         e.preventDefault();
         if (e.dataTransfer.files.length) {
-            if (!e.dataTransfer.files[0].name.match(/\.(f|for|f90|f95|f03|f08)$/)) {
-                alert('Invalid file type. Please upload a Fortran file.');
+            const selectedFileType = fileTypeSelect.value;
+            const validFortranExtensions = /\.(f|for|f90|f95|f03|f08)$/;
+            const validZipExtension = /\.zip$/;
+
+            if ((selectedFileType === 'fortran' && !e.dataTransfer.files[0].name.match(validFortranExtensions)) ||
+                (selectedFileType === 'zip' && !e.dataTransfer.files[0].name.match(validZipExtension))) {
+                alert('Invalid file type. Please upload a valid file.');
                 return;
             }
             fileInput.files = e.dataTransfer.files;
@@ -79,18 +97,8 @@
     });
 
     function updateThumbnail(file) {
-        if (!file.type.startsWith('image/')) {
-            dropZoneThumb.style.display = 'none';
-            dropZone.querySelector('.drop-zone__prompt').textContent = file.name;
-            return;
-        }
-
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        reader.onload = () => {
-            dropZoneThumb.style.display = 'block';
-            dropZoneThumb.innerHTML = `<img src="${reader.result}" alt="${file.name}">`;
-        };
+        dropZoneThumb.style.display = 'block';
+        dropZoneThumb.innerHTML = `<span>${file.name}</span>`;
     }
 </script>
 {% endblock %}

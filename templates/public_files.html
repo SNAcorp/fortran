@@ -5,20 +5,49 @@
 {% block content %}
 <h2>Public Files</h2>
 
-<ul class="list-group">
+<form method="get" action="/public-files">
+    <div class="form-row">
+        <div class="col">
+            <input type="text" class="form-control" name="search" placeholder="Search by title, hashtags, author" value="{{ request.query_params.get('search', '') }}">
+        </div>
+        <div class="col">
+            <input type="date" class="form-control" name="start_date" value="{{ request.query_params.get('start_date', '') }}">
+        </div>
+        <div class="col">
+            <input type="date" class="form-control" name="end_date" value="{{ request.query_params.get('end_date', '') }}">
+        </div>
+        <div class="col">
+            <select class="form-control" name="sort_by">
+                <option value="date" {% if request.query_params.get('sort_by') == 'date' %}selected{% endif %}>Date</option>
+                <option value="downloads" {% if request.query_params.get('sort_by') == 'downloads' %}selected{% endif %}>Downloads</option>
+                <option value="title" {% if request.query_params.get('sort_by') == 'title' %}selected{% endif %}>Title</option>
+            </select>
+        </div>
+        <div class="col">
+            <button type="submit" class="btn btn-primary">Filter</button>
+        </div>
+    </div>
+</form>
+
+<ul class="list-group mt-3">
     {% for file in files %}
+    {% if file.status == 'ready' %}
     <li class="list-group-item d-flex justify-content-between align-items-center">
         <div>
             <h5>{{ file.title }}</h5>
             <p>{{ file.description }}</p>
             <p>Uploaded: {{ file.upload_date.strftime('%Y-%m-%d') }}</p>
-            <p>Modifier version: {{ file.modifier_version.id }}</p>
+            <p>By: {{ file.owner.email }}</p>
+            <p>Status: {{ file.status }}</p>
         </div>
         <div>
             <a href="/download/original/{{ file.id }}" class="btn btn-primary btn-sm">Download Original</a>
+            {% if file.status == 'ready' %}
             <a href="/download/modified/{{ file.id }}" class="btn btn-secondary btn-sm">Download Modified</a>
+            {% endif %}
         </div>
     </li>
+    {% endif %}
     {% endfor %}
 </ul>
 

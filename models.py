@@ -29,6 +29,7 @@ class File(Base):
     hashtags = Column(String)
     download_count = Column(Integer, default=0)
     modifier_version_id = Column(Integer, ForeignKey("modifier_versions.id"))
+    status = Column(String, default="waiting")  # New field for status
 
     owner = relationship("User", back_populates="files")
     modifier_version = relationship("ModifierVersion")

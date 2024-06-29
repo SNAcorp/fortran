@@ -18,18 +18,21 @@
 </div>
 {% endif %}
 
-<ul class="list-group">
+<ul class="list-group" id="file-list">
     {% for file in files %}
-    <li class="list-group-item d-flex justify-content-between align-items-center">
+    <li class="list-group-item d-flex justify-content-between align-items-center" id="file-{{ file.id }}">
         <div>
             <h5>{{ file.title }}</h5>
             <p>{{ file.description }}</p>
             <p>Uploaded: {{ file.upload_date.strftime('%Y-%m-%d') }}</p>
             <p>Modifier version: {{ file.modifier_version.id }}</p>
+            <p>Status: <span class="file-status">{{ file.status }}</span></p>
         </div>
         <div>
             <a href="/download/original/{{ file.id }}" class="btn btn-primary btn-sm">Download Original</a>
+            {% if file.status == 'ready' %}
             <a href="/download/modified/{{ file.id }}" class="btn btn-secondary btn-sm">Download Modified</a>
+            {% endif %}
             {% if file.modifier_version.id != modifier_version %}
             <form action="/remodify/{{ file.id }}" method="post" class="remodify-form" style="display:inline;">
                 <button type="submit" class="btn btn-warning btn-sm">Remodify with Latest Modifier</button>
@@ -58,6 +61,21 @@ document.querySelectorAll('.remodify-form').forEach(form => {
         }
     });
 });
+
+const fileStatuses = document.querySelectorAll('.file-status');
+
+function updateFileStatus(fileId, status) {
+    const fileElement = document.getElementById(`file-${fileId}`);
+    const statusElement = fileElement.querySelector('.file-status');
+    statusElement.textContent = status;
+}
+
+const ws = new WebSocket(`ws://${window.location.host}/ws`);
+
+ws.onmessage = function(event) {
+    const data = JSON.parse(event.data);
+    updateFileStatus(data.file_id, data.status);
+};
 </script>
 
 {% endblock %}
